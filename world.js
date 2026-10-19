@@ -7,10 +7,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makeCat } from './cat.js?v=2';
+import { makeSky } from './sky.js?v=1';
 
 const SCAN = 'scans/mounds.glb';
 const STREAM = 'https://stream.radioalhara.net/ra';
 const PAPER = 0xbbbbbb;
+const NIGHT = 0x05070d;  // where the ground fades into the dark
 const $ = (id) => document.getElementById(id);
 
 // --- stage ---
@@ -19,7 +21,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(PAPER);
+scene.background = new THREE.Color(NIGHT);
+let sky = null;
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -47,7 +50,8 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
     if (!o.isMesh) return;
     const map = o.material.map;
     o.material.dispose();
-    o.material = new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide });
+    // moonlight: the photo dimmed and cooled under the stars
+    o.material = new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide, color: 0x5a6680 });
   });
   scene.add(world);
   world.updateMatrixWorld(true);
@@ -55,7 +59,9 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   const size = new THREE.Box3().setFromObject(world).getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.z);
   // clear around the shrine, thickening out to the scan's ragged edges
-  scene.fog = new THREE.Fog(PAPER, shrine.reach * 1.5, Math.max(shrine.reach * 5, span * 0.6));
+  scene.fog = new THREE.Fog(NIGHT, shrine.reach * 1.5, Math.max(shrine.reach * 5, span * 0.6));
+  sky = makeSky(scene, span * 1.5);
+  sky.centre(shrine.base);
   camera.near = span / 2000;
   camera.far = span * 4;
   camera.updateProjectionMatrix();
@@ -155,6 +161,7 @@ renderer.setAnimationLoop((now) => {
   swayFrame(now);
   controls.update();
   cat?.update(dt, now);
+  sky?.update();
   renderer.render(scene, camera);
 });
 
