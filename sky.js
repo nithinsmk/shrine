@@ -25,14 +25,20 @@ export function makeSky(scene, radius) {
   dome.scale.x = -1;            // seen from inside, so east and west aren't mirrored
   dome.renderOrder = -1;
 
-  // tilt: the celestial pole stands at the latitude's height above the horizon
+  // tilt: the celestial pole stands at the latitude's height above the horizon;
+  // spin: turns with the sidereal time, carrying the stars and anything set among them
   const tilt = new THREE.Group();
   tilt.rotation.x = -(Math.PI / 2 - THREE.MathUtils.degToRad(LAT));
-  tilt.add(dome);
+  const spin = new THREE.Group();
+  spin.add(dome);
+  tilt.add(spin);
   scene.add(tilt);
+  let paused = false;
 
   return {
+    spin,
     centre(at) { tilt.position.copy(at); },
-    update() { dome.rotation.y = -THREE.MathUtils.degToRad(siderealDegrees()); },
+    set paused(on) { paused = on; },
+    update() { if (!paused) spin.rotation.y = -THREE.MathUtils.degToRad(siderealDegrees()); },
   };
 }

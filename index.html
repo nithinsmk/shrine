@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>shrine</title>
 <meta name="description" content="A termite mound shrine, tuned to Radio alHara.">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 <script type="importmap">
   {
     "imports": {
@@ -23,6 +23,13 @@
 
 <!-- the invitation crawl stands on the horizon in the world (party.js); these are its two buttons -->
 <button id="crawl-skip" type="button" hidden>skip ✕</button>
+<!-- a collective's card, opened from its constellation -->
+<div id="card" role="dialog" aria-live="polite" hidden>
+  <div class="card-title"></div>
+  <p class="card-text"></p>
+  <a class="card-link" target="_blank" rel="noopener" hidden></a>
+  <div class="card-foot">▼</div>
+</div>
 <button id="invitation" type="button" hidden>✦ read the invitation ✦</button>
 
 <div class="corner bottom-left">
@@ -47,6 +54,6 @@
   sky: <a href="https://svs.gsfc.nasa.gov/4851" target="_blank" rel="noopener">Deep Star Maps 2020</a>, NASA/Goddard Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC, over Yogyakarta, now
 </p>
 
-<script type="module" src="world.js?v=16"></script>
+<script type="module" src="world.js?v=20"></script>
 </body>
 </html>

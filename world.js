@@ -7,7 +7,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makeCat } from './cat.js?v=4';
-import { makeSky } from './sky.js?v=1';
+import { makeSky } from './sky.js?v=2';
+import { makeConstellations } from './constellations.js?v=4';
 import { makeSatellite, makeTicker, makeCrawl } from './party.js?v=6';
 
 const SCAN = 'scans/mounds.glb';
@@ -24,7 +25,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(NIGHT);
 let sky = null;
-let satellite = null, ticker = null, crawl = null;
+let satellite = null, ticker = null, crawl = null, stars = null;
 
 // --- brightness: from deep night (0) to the photo's own daylight (1), remembered per visitor ---
 const groundMats = [];
@@ -83,6 +84,10 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   scene.fog = new THREE.Fog(NIGHT, shrine.reach * 1.5, Math.max(shrine.reach * 5, span * 0.6));
   sky = makeSky(scene, span * 1.5);
   sky.centre(shrine.base);
+  sky.update();
+  makeConstellations({ spin: sky.spin, radius: span * 1.4, facing: OUT.clone().negate(), up: UP })
+    .then((c) => { stars = c; })
+    .catch((err) => console.error('the constellations did not form', err));
   satellite = makeSatellite(scene, shrine.base, span * 0.9);
   crawl = makeCrawl(scene);
   placeCrawl();
@@ -162,6 +167,10 @@ function placeCrawl() {
   crawl.place(at, eye, 2 * dist * Math.tan(THREE.MathUtils.degToRad(14)));
 }
 
+// a clock for the turning things (the drift, the satellite, the sky) that stops while a card is open
+let pausedAt = null, pausedTotal = 0;
+const worldNow = (now = performance.now()) => now - pausedTotal - (pausedAt !== null ? now - pausedAt : 0);
+
 let flight = null;
 let sway = null;
 let resumeSway = null;
@@ -211,13 +220,13 @@ $('invitation').addEventListener('click', () => {
 
 function startSway() {
   const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
-  sway = { s, t0: performance.now(), theta: s.theta, phi: s.phi, radius: s.radius };
+  sway = { s, t0: worldNow(), theta: s.theta, phi: s.phi, radius: s.radius };
 }
 
 // one slow lap every ~3 minutes, breathing a little closer and further
 function swayFrame(now) {
   if (!sway) return;
-  const t = (now - sway.t0) / 1000;
+  const t = (worldNow(now) - sway.t0) / 1000;
   sway.s.theta = sway.theta + t * ((2 * Math.PI) / 180);
   sway.s.phi = sway.phi + 0.04 * Math.sin(t * ((2 * Math.PI) / 53));
   sway.s.radius = sway.radius * (1 + 0.06 * Math.sin(t * ((2 * Math.PI) / 71)));
@@ -339,14 +348,64 @@ canvas.addEventListener('pointerup', (e) => {
   if (!press) return;
   const still = Math.hypot(e.clientX - press.x, e.clientY - press.y) < 8 && performance.now() - press.t < 600;
   press = null;
-  if (still && onCat(e)) cat.pet();
+  if (!still) return;
+  if (onCat(e)) { cat.pet(); return; }
+  const hit = pickStars(e);
+  if (hit) openCard(hit); else if (card) closeCard();
 });
 let hoverAt = 0;
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse' || performance.now() - hoverAt < 80) return;
   hoverAt = performance.now();
-  canvas.style.cursor = onCat(e) ? 'pointer' : '';
+  const hit = onCat(e) ? null : pickStars(e);
+  canvas.style.cursor = onCat(e) || hit ? 'pointer' : '';
+  if (hit && hit.entry.id !== card?.id && hit.entry.id !== justClosed) openCard(hit);
+  if (!hit) justClosed = null; // leaving the logo lets it open again next time
 });
+
+// --- the collectives' cards: an 8-bit window floating by the constellation ---
+let card = null, justClosed = null, typing = null, closeTimer = null;
+function pickStars(e) {
+  if (!stars) return null;
+  const r = canvas.getBoundingClientRect();
+  return stars.pick(e.clientX - r.left, e.clientY - r.top, camera, r.width, r.height);
+}
+function openCard({ entry, box }) {
+  if (card) clearCard();
+  card = entry;
+  if (pausedAt === null) pausedAt = performance.now(); // the sky holds still
+  sky.paused = true;
+  stars.highlight(entry.id);
+  const el = $('card');
+  el.querySelector('.card-title').textContent = `★ ${entry.name}`;
+  const link = el.querySelector('.card-link');
+  if (entry.link) { link.href = entry.link.href; link.textContent = `▶ ${entry.link.label}`; link.hidden = false; } else link.hidden = true;
+  const text = el.querySelector('.card-text');
+  text.textContent = '';
+  el.hidden = false;
+  // sit beside the logo, kept on screen
+  const w = el.offsetWidth, h = el.offsetHeight + 80;
+  const x = Math.min(innerWidth - w - 12, Math.max(12, (box.minX + box.maxX) / 2 - w / 2));
+  const below = box.maxY + 14, above = box.minY - h - 14;
+  el.style.left = `${x}px`;
+  el.style.top = `${Math.max(12, below + h < innerHeight - 70 ? below : above)}px`;
+  // typed out letter by letter, like a game's dialogue box
+  let i = 0;
+  typing = setInterval(() => { text.textContent = entry.text.slice(0, ++i); if (i >= entry.text.length) clearInterval(typing); }, 16);
+  closeTimer = setTimeout(closeCard, 8000);
+}
+function clearCard() { clearInterval(typing); clearTimeout(closeTimer); }
+function closeCard() {
+  if (!card) return;
+  clearCard();
+  justClosed = card.id;
+  card = null;
+  $('card').hidden = true;
+  stars.highlight(null);
+  if (pausedAt !== null) { pausedTotal += performance.now() - pausedAt; pausedAt = null; }
+  sky.paused = false;
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCard(); });
 
 let last = performance.now();
 renderer.setAnimationLoop((now) => {
@@ -361,7 +420,8 @@ renderer.setAnimationLoop((now) => {
   controls.update();
   crawl?.update(dt);
   sky?.update();
-  satellite?.update(now);
+  satellite?.update(worldNow(now));
+  stars?.update(dt, now);
   ticker?.update(dt);
   renderer.render(scene, camera);
 });
@@ -441,4 +501,4 @@ function listen(now) {
 }
 
 // ?debug: a handle for looking at the cat from the console
-if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get satellite() { return satellite; }, get crawl() { return crawl; }, get holding() { return holding; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };
+if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get stars() { return stars; }, openCard, closeCard, get satellite() { return satellite; }, get crawl() { return crawl; }, get holding() { return holding; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };
