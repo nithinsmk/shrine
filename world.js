@@ -23,6 +23,19 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(NIGHT);
 let sky = null;
+
+// --- brightness: from deep night (0) to the photo's own daylight (1), remembered per visitor ---
+const groundMats = [];
+const DARK = new THREE.Color(0x2a3040), LIGHT = new THREE.Color(0xffffff);
+function setBrightness(t) {
+  const c = DARK.clone().lerp(LIGHT, t);
+  for (const m of groundMats) m.color.copy(c);
+  try { localStorage.setItem('shrine-brightness', t); } catch {}
+}
+let brightness = 0.35;
+try { const saved = parseFloat(localStorage.getItem('shrine-brightness')); if (saved >= 0 && saved <= 1) brightness = saved; } catch {}
+$('brightness').value = brightness;
+$('brightness').addEventListener('input', (e) => setBrightness(+e.target.value));
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -50,10 +63,12 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
     if (!o.isMesh) return;
     const map = o.material.map;
     o.material.dispose();
-    // moonlight: the photo dimmed and cooled under the stars
-    o.material = new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide, color: 0x5a6680 });
+    // moonlight: the photo dimmed and cooled under the stars (the slider sets how much)
+    o.material = new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide });
+    groundMats.push(o.material);
   });
   scene.add(world);
+  setBrightness(brightness);
   world.updateMatrixWorld(true);
   shrine = findShrine(world);
   const size = new THREE.Box3().setFromObject(world).getSize(new THREE.Vector3());

@@ -13,7 +13,10 @@ body { font: 13px/1.4 ui-monospace, Menlo, monospace; }
 .top-left { top: 16px; left: 16px; }
 .top-right { top: 16px; right: 16px; max-width: 280px; text-align: right; font-size: 11px; opacity: .75; }
 .bottom-left { bottom: 16px; left: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: calc(100vw - 96px); }
-.bottom-right { bottom: 16px; right: 16px; }
+.bottom-right { bottom: 16px; right: 16px; display: flex; gap: 10px; align-items: center; }
+.bright { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.bright input { width: 110px; accent-color: var(--moon); cursor: pointer; }
+@media (max-width: 600px) { .bright input { width: 80px; } }
 .title { font-size: 15px; letter-spacing: .08em; }
 a { color: inherit; }
 p { margin: 0; }
