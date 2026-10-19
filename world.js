@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { makeCat } from './cat.js?v=2';
+import { makeCat } from './cat.js?v=3';
 import { makeSky } from './sky.js?v=1';
 
 const SCAN = 'scans/mounds.glb';
@@ -164,9 +164,71 @@ function flyFrame(now) {
 }
 
 // a visitor taking the camera stops the drift; it picks up again after a quiet while
-controls.addEventListener('start', () => { flight = null; sway = null; clearTimeout(resumeSway); });
-controls.addEventListener('end', () => { clearTimeout(resumeSway); resumeSway = setTimeout(startSway, 15000); });
-$('home').addEventListener('click', () => shrine && flyTo(view('home'), 2200, startSway));
+controls.addEventListener('start', () => {
+  flight = null; sway = null; clearTimeout(resumeSway);
+  if (follow) follow.touching = true;
+});
+controls.addEventListener('end', () => {
+  clearTimeout(resumeSway);
+  if (follow) { follow.touching = false; follow.idleUntil = performance.now() + 5000; return; }
+  resumeSway = setTimeout(startSway, 15000);
+});
+$('home').addEventListener('click', () => { if (!shrine) return; if (follow) endFollow(); else flyTo(view('home'), 2200, startSway); });
+
+// --- her view: a third-person camera behind the cat, a little to one side ---
+let follow = null; // { last, touching, idleUntil } while following
+const UP = new THREE.Vector3(0, 1, 0);
+
+function behindHer() {
+  const H = cat.height, p = cat.position, h = cat.heading;
+  const ahead = new THREE.Vector3(h.x, 0, h.y).normalize();
+  const side = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  const dist = H * (cat.resting ? 5 : 6.5);
+  const a = 0.5; // about 30° off straight behind, so her outline still reads
+  const from = p.clone().addScaledVector(ahead, -dist * Math.cos(a)).addScaledVector(side, dist * Math.sin(a)).addScaledVector(UP, H * 2);
+  const to = p.clone().addScaledVector(UP, H * 0.55).addScaledVector(ahead, H * 1.2);
+  return { from, to };
+}
+
+function keepAboveGround() {
+  const g = cat.groundAt(camera.position.x, camera.position.z);
+  if (!Number.isNaN(g)) camera.position.y = Math.max(camera.position.y, g + cat.height * 0.8);
+}
+
+function startFollow() {
+  if (!cat) return;
+  follow = { last: null, touching: false, idleUntil: 0 };
+  sway = null; clearTimeout(resumeSway);
+  controls.minDistance = cat.height * 1.5;
+  flyTo(behindHer(), 1600, () => { if (follow) follow.last = cat.position.clone(); });
+  $('follow').setAttribute('aria-pressed', 'true');
+}
+
+function endFollow() {
+  follow = null;
+  controls.minDistance = shrine.height * 0.6;
+  flyTo(view('home'), 2200, startSway);
+  $('follow').setAttribute('aria-pressed', 'false');
+}
+
+function followFrame(dt, now) {
+  if (!follow || !follow.last || flight) return;
+  // carry the camera along with her, so a visitor's own angle is kept while she moves
+  const moved = cat.position.clone().sub(follow.last);
+  camera.position.add(moved);
+  controls.target.add(moved);
+  follow.last.copy(cat.position);
+  // when nobody is holding the camera, ease back round behind her
+  if (!follow.touching && now > follow.idleUntil) {
+    const want = behindHer();
+    const k = 1 - Math.exp(-dt * 1.2);
+    camera.position.lerp(want.from, k);
+    controls.target.lerp(want.to, Math.min(1, k * 2));
+  }
+  keepAboveGround();
+}
+
+$('follow').addEventListener('click', () => (follow ? endFollow() : startFollow()));
 
 let last = performance.now();
 renderer.setAnimationLoop((now) => {
@@ -174,8 +236,9 @@ renderer.setAnimationLoop((now) => {
   last = now;
   flyFrame(now);
   swayFrame(now);
-  controls.update();
   cat?.update(dt, now);
+  followFrame(dt, now);
+  controls.update();
   sky?.update();
   renderer.render(scene, camera);
 });
@@ -255,4 +318,4 @@ function listen(now) {
 }
 
 // ?debug: a handle for looking at the cat from the console
-if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, camera, controls, get shrine() { return shrine; }, flyTo };
+if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };

@@ -370,6 +370,9 @@ export async function makeCat({ scene, camera, world, shrine, beat }) {
 
   return {
     update, get position() { return cat.position; }, height: H,
+    get heading() { return heading; },              // the way she last walked (x, z)
+    get resting() { return !step.to; },
+    groundAt: (x, z) => ground.at(x, z),
     // for ?debug
     get state() { return { pose: step.pose, to: step.to?.toArray(), left: plan.length, footR, bed: bed.toArray() }; },
     probe: () => { let open = 0, clear = 0; for (let i = 0; i < 200; i++) { const a = Math.random() * 6.28, r = footR + H * (2 + Math.random() * 14); const p = centre.clone().add(new THREE.Vector2(Math.cos(a), Math.sin(a)).multiplyScalar(r)); if (isOpen(p)) { open++; if (clearPath(bed, p)) clear++; } } return { open, clear }; },

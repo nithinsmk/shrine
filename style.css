@@ -26,7 +26,8 @@ button {
   padding: 7px 12px; cursor: pointer; backdrop-filter: blur(4px);
 }
 button:hover { background: var(--moon); color: var(--night); }
-#home { width: 34px; height: 34px; padding: 0; font-size: 16px; }
+#home, #follow { width: 34px; height: 34px; padding: 0; font-size: 16px; }
+#follow[aria-pressed="true"] { background: var(--moon); color: var(--night); }
 #notice:empty { display: none; }
 
 #loading {
