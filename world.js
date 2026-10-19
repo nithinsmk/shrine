@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { makeCat } from './cat.js?v=2';
 
 const SCAN = 'scans/mounds.glb';
 const STREAM = 'https://stream.radioalhara.net/ra';
@@ -35,6 +36,7 @@ resize();
 
 // --- the scan ---
 let shrine = null; // { base, peak, height, reach } once the scan is in
+let cat = null;
 
 new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   if (e.lengthComputable) $('progress').textContent = `${Math.round((e.loaded / e.total) * 100)}%`;
@@ -61,6 +63,9 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   controls.maxDistance = span * 0.55;
   arrive();
   $('loading').classList.add('gone');
+  makeCat({ scene, camera, world, shrine, beat: () => listen(performance.now()) })
+    .then((c) => { cat = c; })
+    .catch((err) => console.error('the cat did not come', err));
 }).catch((err) => {
   console.error(err);
   $('loading').textContent = 'the mounds did not load. Try reloading.';
@@ -142,10 +147,14 @@ controls.addEventListener('start', () => { flight = null; sway = null; clearTime
 controls.addEventListener('end', () => { clearTimeout(resumeSway); resumeSway = setTimeout(startSway, 15000); });
 $('home').addEventListener('click', () => shrine && flyTo(view('home'), 2200, startSway));
 
+let last = performance.now();
 renderer.setAnimationLoop((now) => {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
   flyFrame(now);
   swayFrame(now);
   controls.update();
+  cat?.update(dt, now);
   renderer.render(scene, camera);
 });
 
@@ -166,6 +175,7 @@ $('tune').addEventListener('click', () => {
 });
 
 function play() {
+  hearing();
   say('tuning in…');
   audio.src = STREAM;
   audio.play().catch(() => say('tap again to tune in'));
@@ -190,3 +200,37 @@ function stalled() {
   }, 4000);
 }
 for (const e of ['error', 'stalled', 'waiting']) audio.addEventListener(e, stalled);
+
+// --- listening: the low end of the stream, for the cat's eyes to flare on ---
+let analyser = null, bins = null, prev = null, lastBeat = 0;
+const fluxHist = [];
+function hearing() {
+  if (analyser) return;
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ac.createMediaElementSource(audio);
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.2;
+  src.connect(analyser);
+  analyser.connect(ac.destination);
+  bins = new Uint8Array(analyser.frequencyBinCount);
+  prev = new Float32Array(analyser.frequencyBinCount);
+}
+// true on a kick or bass onset (spectral flux over ~40–300 Hz against its recent spread)
+function listen(now) {
+  if (!analyser || audio.paused) return false;
+  analyser.getByteFrequencyData(bins);
+  const hz = analyser.context.sampleRate / analyser.fftSize;
+  const lo = Math.floor(40 / hz), hi = Math.ceil(300 / hz);
+  let flux = 0;
+  for (let i = lo; i <= hi; i++) { const v = bins[i] / 255; flux += Math.max(0, v - prev[i]); prev[i] = v; }
+  fluxHist.push(flux);
+  if (fluxHist.length > 50) fluxHist.shift();
+  const mean = fluxHist.reduce((a, b) => a + b, 0) / fluxHist.length;
+  const sd = Math.sqrt(fluxHist.reduce((a, b) => a + (b - mean) ** 2, 0) / fluxHist.length);
+  if (flux > mean + 1.7 * sd && flux > 0.15 && now - lastBeat > 280) { lastBeat = now; return true; }
+  return false;
+}
+
+// ?debug: a handle for looking at the cat from the console
+if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, camera, controls, get shrine() { return shrine; }, flyTo };
