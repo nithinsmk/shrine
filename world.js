@@ -8,7 +8,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makeCat } from './cat.js?v=3';
 import { makeSky } from './sky.js?v=1';
-import { makeSatellite, makeTicker, mountCrawl } from './party.js?v=5';
+import { makeSatellite, makeTicker, makeCrawl } from './party.js?v=6';
 
 const SCAN = 'scans/mounds.glb';
 const STREAM = 'https://stream.radioalhara.net/ra';
@@ -24,8 +24,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(NIGHT);
 let sky = null;
-let satellite = null, ticker = null;
-mountCrawl();
+let satellite = null, ticker = null, crawl = null;
 
 // --- brightness: from deep night (0) to the photo's own daylight (1), remembered per visitor ---
 const groundMats = [];
@@ -43,11 +42,15 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
-controls.maxPolarAngle = Math.PI * 0.46; // never under the ground
+controls.maxPolarAngle = Math.PI * 0.6; // a little below the eye line, to look up at the sky
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight;
+  // keep at least ~58° across, so on a phone the shrine and the crawl still fit side by side
+  const minAcross = THREE.MathUtils.degToRad(58);
+  const tall = 2 * Math.atan(Math.tan(minAcross / 2) / camera.aspect);
+  camera.fov = Math.min(80, Math.max(45, THREE.MathUtils.radToDeg(tall)));
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
@@ -81,6 +84,8 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   sky = makeSky(scene, span * 1.5);
   sky.centre(shrine.base);
   satellite = makeSatellite(scene, shrine.base, span * 0.9);
+  crawl = makeCrawl(scene);
+  placeCrawl();
   camera.near = span / 2000;
   camera.far = span * 4;
   camera.updateProjectionMatrix();
@@ -124,12 +129,38 @@ function findShrine(world) {
   return { base, peak, height, reach: height * 2.6 };
 }
 
-// --- the camera: come down from high above, then drift round the shrine ---
+// --- the camera: come down from high above, then drift round the shrine, always looking out to
+// the horizon with a little up-tilt, so most of the screen is sky and the mounds stay in view ---
+const PITCH = THREE.MathUtils.degToRad(11);   // how far above the horizon the camera looks
+const READ_YAW = THREE.MathUtils.degToRad(18); // reading view: turned left, the shrine on the right
+const CRAWL_YAW = THREE.MathUtils.degToRad(29); // where the crawl stands, left of the shrine
+const OUT = new THREE.Vector3(0.7, 0, 1).normalize(); // the side the camera stands on
+
+function eyePoint() {
+  const ground = shrine.peak.y - shrine.height;
+  return new THREE.Vector3(shrine.peak.x, ground + shrine.height * 0.5, shrine.peak.z).addScaledVector(OUT, shrine.reach * 1.05);
+}
+function horizonView(yaw) {
+  const eye = eyePoint();
+  const dist = shrine.reach * 1.05;
+  const look = OUT.clone().negate().applyAxisAngle(UP, yaw);
+  return { from: eye, to: eye.clone().addScaledVector(look, dist).addScaledVector(UP, dist * Math.tan(PITCH)) };
+}
 const view = (where) => {
-  const dir = where === 'high' ? new THREE.Vector3(0.25, 2.4, 0.5) : new THREE.Vector3(0.7, 0.42, 1);
-  const k = where === 'high' ? 3.2 : 1;
-  return { from: shrine.base.clone().add(dir.normalize().multiplyScalar(shrine.reach * k)), to: shrine.base.clone() };
+  if (where === 'high') {
+    return { from: shrine.base.clone().add(new THREE.Vector3(0.25, 2.4, 0.5).normalize().multiplyScalar(shrine.reach * 3.2)), to: shrine.base.clone() };
+  }
+  return horizonView(where === 'read' ? READ_YAW : 0);
 };
+
+// the crawl stands far out on the horizon, left of the shrine as seen from the reading view
+function placeCrawl() {
+  const eye = eyePoint();
+  const dist = shrine.reach * 3.2;
+  const dir = OUT.clone().negate().applyAxisAngle(UP, CRAWL_YAW);
+  const at = eye.clone().addScaledVector(dir, dist).addScaledVector(UP, dist * Math.tan(THREE.MathUtils.degToRad(1.5))); // just above the far rocks
+  crawl.place(at, eye, 2 * dist * Math.tan(THREE.MathUtils.degToRad(14)));
+}
 
 let flight = null;
 let sway = null;
@@ -141,12 +172,42 @@ function flyTo(v, ms, after) {
   flight = { from: camera.position.clone(), to: v.from, fromT: controls.target.clone(), toT: v.to, t0: performance.now(), ms, after };
 }
 
+let holding = false; // the camera waits on the reading view while the crawl plays
+
 function arrive() {
   const high = view('high');
   camera.position.copy(high.from);
   controls.target.copy(high.to);
-  flyTo(view('home'), 7000, startSway);
+  holding = true;
+  flyTo(view('read'), 7000);
+  $('crawl-skip').hidden = false;
+  // three rounds on arrival: two held on the reading view, the third while the camera drifts
+  crawl.play(3, (n, done) => {
+    if (n === 2) release();
+    if (done) crawlDone();
+  });
 }
+
+function release() {
+  if (!holding) return;
+  holding = false;
+  flyTo(view('home'), 4500, startSway);
+}
+function crawlDone() {
+  $('crawl-skip').hidden = true;
+  $('invitation').hidden = false;
+}
+
+$('crawl-skip').addEventListener('click', () => { crawl.stop(); release(); crawlDone(); });
+$('invitation').addEventListener('click', () => {
+  if (!crawl) return;
+  if (follow) { follow = null; controls.minDistance = shrine.height * 0.6; $('follow').setAttribute('aria-pressed', 'false'); }
+  $('invitation').hidden = true;
+  $('crawl-skip').hidden = false;
+  holding = true;
+  flyTo(view('read'), 2600);
+  crawl.play(1, () => { release(); crawlDone(); });
+});
 
 function startSway() {
   const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
@@ -181,9 +242,10 @@ controls.addEventListener('start', () => {
 controls.addEventListener('end', () => {
   clearTimeout(resumeSway);
   if (follow) { follow.touching = false; follow.idleUntil = performance.now() + 5000; return; }
+  if (holding) return; // stay for the crawl
   resumeSway = setTimeout(startSway, 15000);
 });
-$('home').addEventListener('click', () => { if (!shrine) return; if (follow) endFollow(); else flyTo(view('home'), 2200, startSway); });
+$('home').addEventListener('click', () => { if (!shrine) return; if (follow) endFollow(); else { holding = false; flyTo(view('home'), 2200, startSway); } });
 
 // --- her view: a third-person camera behind the cat, a little to one side ---
 let follow = null; // { last, touching, idleUntil } while following
@@ -205,8 +267,29 @@ function keepAboveGround() {
   if (!Number.isNaN(g)) camera.position.y = Math.max(camera.position.y, g + cat.height * 0.8);
 }
 
+// low over the ground, a rock can come between the camera and the shrine: rise smoothly over it,
+// and settle back down once it's passed
+let lift = 0;
+function clearSightline(dt) {
+  const foot = new THREE.Vector3(shrine.peak.x, shrine.peak.y - shrine.height * 0.8, shrine.peak.z);
+  const cam = camera.position;
+  const baseY = cam.y;
+  let need = baseY;
+  for (let i = 1; i < 12; i++) {
+    const t = i / 12;
+    const x = cam.x + (foot.x - cam.x) * t, z = cam.z + (foot.z - cam.z) * t;
+    const g = cat.groundAt(x, z);
+    if (Number.isNaN(g)) continue;
+    need = Math.max(need, (g + cat.height * 0.6 - foot.y * t) / (1 - t));
+  }
+  const want = Math.min(need - baseY, shrine.height * 1.2);
+  lift += (want - lift) * Math.min(1, dt * (want > lift ? 2.5 : 0.8));
+  cam.y = baseY + lift;
+}
+
 function startFollow() {
   if (!cat) return;
+  holding = false;
   follow = { last: null, touching: false, idleUntil: 0 };
   sway = null; clearTimeout(resumeSway);
   controls.minDistance = cat.height * 1.5;
@@ -246,9 +329,12 @@ renderer.setAnimationLoop((now) => {
   last = now;
   flyFrame(now);
   swayFrame(now);
+  if (cat && sway) clearSightline(dt); // only while drifting: the sway sets a fresh position each frame
   cat?.update(dt, now);
   followFrame(dt, now);
+  if (cat && !follow) keepAboveGround();
   controls.update();
+  crawl?.update(dt);
   sky?.update();
   satellite?.update(now);
   ticker?.update(dt);
@@ -330,4 +416,4 @@ function listen(now) {
 }
 
 // ?debug: a handle for looking at the cat from the console
-if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get satellite() { return satellite; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };
+if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get satellite() { return satellite; }, get crawl() { return crawl; }, get holding() { return holding; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };

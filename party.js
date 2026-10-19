@@ -147,30 +147,102 @@ export function makeTicker(scene, { x, z, groundY, radius, height }) {
   };
 }
 
-// --- the crawl ---
+// --- the crawl: the invitation as a plane of text standing on the horizon, tilted back like the
+// Star Wars opening, off to one side of the shrine so it never covers the hill ---
 
-export function mountCrawl() {
-  const crawl = document.getElementById('crawl');
-  const inner = crawl.querySelector('.crawl-text');
-  const call = document.getElementById('invitation');
-  const skip = document.getElementById('crawl-skip');
+const CRAWL = [
+  { text: '31 · 10 · 2026', head: true },
+  { text: 'PSYCHOPOMPS', title: true },
+  { text: 'SXSE × Chinabot × _Subkontinent welcome you to a night of mediation between infra and ultra, nether and heavens, truths and majicks.' },
+  { text: 'At sandhya, the hour that belongs to neither day nor night, the membranes grow porous twixt the living and their ancestors, the waking and the dreaming, this world and the one just beside it. Allow the pilandok, the mouse-deer, shapeshifter and crosser of boundaries, to escort you through voids and shines. Follow close, but never too close, and trust the path it takes.' },
+  { text: 'Come sway with us on a night that yearns for transformation, transition and trickery.' },
+  { text: 'Leave your reds at home, lest you are lost before you reach the temporary shrine of our collective making.' },
+  { text: 'Memeshift · Leng Seong · HWXXNG · Sabiwa · Thiên · mobin · nischal · Rana Ghose · fugitive radio · NaN', lineup: true },
+];
 
-  function minimise() {
-    crawl.classList.remove('rolling');
-    crawl.hidden = true;
-    call.hidden = false;
+function crawlCanvas() {
+  const W = 1024, PAD = 48, LINE = 84;
+  const fontFor = (b) => (b.title ? 'bold 96px ui-monospace, Menlo, monospace' : b.head ? '600 52px ui-monospace, Menlo, monospace' : '600 58px ui-monospace, Menlo, monospace');
+  const g0 = document.createElement('canvas').getContext('2d');
+  const lines = [];
+  for (const b of CRAWL) {
+    g0.font = fontFor(b);
+    const words = b.text.split(' ');
+    let line = '';
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (g0.measureText(next).width > W - PAD * 2 && line) { lines.push({ t: line, b }); line = w; } else line = next;
+    }
+    lines.push({ t: line, b }, { t: '', b }); // a blank line after each paragraph
   }
-  function roll(rounds) {
-    call.hidden = true;
-    crawl.hidden = false;
-    inner.style.animation = 'none';
-    void inner.offsetWidth; // restart the animation
-    inner.style.animation = '';
-    inner.style.animationIterationCount = rounds;
-    crawl.classList.add('rolling');
-  }
-  inner.addEventListener('animationend', minimise);
-  skip.addEventListener('click', minimise);
-  call.addEventListener('click', () => roll(1));
-  roll(3); // three rounds on arrival
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = Math.min(8192, lines.length * LINE + 2 * PAD);
+  const g = c.getContext('2d');
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  g.fillStyle = GLOW;
+  g.shadowColor = 'rgba(212,242,60,.6)';
+  g.shadowBlur = 18;
+  lines.forEach((l, i) => { g.font = fontFor(l.b); g.fillText(l.t, W / 2, PAD + i * LINE); });
+  return c;
+}
+
+// the far end fades into the sky
+function fadeMap() {
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#000'); gr.addColorStop(0.4, '#000'); gr.addColorStop(0.75, '#fff'); gr.addColorStop(0.97, '#fff'); gr.addColorStop(1, '#000');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+  return new THREE.CanvasTexture(c);
+}
+
+export function makeCrawl(scene) {
+  const text = crawlCanvas();
+  const tex = new THREE.CanvasTexture(text);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, alphaMap: fadeMap(), transparent: true, depthWrite: false, fog: false, opacity: 0 });
+  const group = new THREE.Group();
+  let mesh = null, win = 1, speed = 0;
+  scene.add(group);
+
+  let rounds = 0, played = 0, onRound = null, fade = 0;
+  const ROUND = 52; // seconds for the whole text to pass
+
+  return {
+    // stand it at `at` (its bottom edge on the horizon), turned to face `from`, `width` wide
+    place(at, from, width, tilt = 0.75) {
+      const length = width * 1.5;
+      if (mesh) { group.remove(mesh); mesh.geometry.dispose(); }
+      mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, length).translate(0, length / 2, 0), mat);
+      mesh.rotation.x = -tilt; // lean back, away from the viewer
+      mesh.renderOrder = 4;
+      group.add(mesh);
+      group.position.copy(at);
+      group.rotation.y = Math.atan2(from.x - at.x, from.z - at.z);
+      // the plane shows a win of the text; the win slides down it so the words rise and recede
+      win = length / (text.height * (width / text.width));
+      tex.repeat.set(1, win);
+      tex.offset.y = 1;
+      speed = (1 + win) / ROUND;
+    },
+    play(n, cb) { rounds = n; played = 0; onRound = cb; tex.offset.y = 1; fade = 1; },
+    stop() { rounds = 0; fade = 0; },
+    get playing() { return rounds > 0; },
+    update(dt) {
+      mat.opacity += (fade - mat.opacity) * Math.min(1, dt * 2);
+      if (!rounds) return;
+      tex.offset.y -= speed * dt;
+      if (tex.offset.y < -win) {
+        played++;
+        tex.offset.y = 1;
+        if (played >= rounds) { rounds = 0; fade = 0; }
+        onRound?.(played, rounds === 0);
+      }
+    },
+  };
 }

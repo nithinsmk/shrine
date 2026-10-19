@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>shrine</title>
 <meta name="description" content="A termite mound shrine, tuned to Radio alHara.">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=10">
 <script type="importmap">
   {
     "imports": {
@@ -21,21 +21,8 @@
 <div id="loading">gathering the mounds… <span id="progress"></span></div>
 
 
-<!-- the invitation: rolls over the sky three times on arrival, then waits behind the button -->
-<div id="crawl" hidden>
-  <div class="crawl-stage">
-    <div class="crawl-text">
-      <p class="crawl-head">31 · 10 · 2026</p>
-      <p class="crawl-title">PSYCHOPOMPS</p>
-      <p>SXSE × Chinabot × _Subkontinent welcome you to a night of mediation between infra and ultra, nether and heavens, truths and majicks.</p>
-      <p>At sandhya, the hour that belongs to neither day nor night, the membranes grow porous twixt the living and their ancestors, the waking and the dreaming, this world and the one just beside it. Allow the pilandok, the mouse-deer, shapeshifter and crosser of boundaries, to escort you through voids and shines. Follow close, but never too close, and trust the path it takes.</p>
-      <p>Come sway with us on a night that yearns for transformation, transition and trickery.</p>
-      <p>Leave your reds at home, lest you are lost before you reach the temporary shrine of our collective making.</p>
-      <p class="crawl-lineup">Memeshift · Leng Seong · HWXXNG · Sabiwa · Thiên · mobin · nischal · Rana Ghose · fugitive radio · NaN</p>
-    </div>
-  </div>
-  <button id="crawl-skip" type="button">skip ✕</button>
-</div>
+<!-- the invitation crawl stands on the horizon in the world (party.js); these are its two buttons -->
+<button id="crawl-skip" type="button" hidden>skip ✕</button>
 <button id="invitation" type="button" hidden>✦ read the invitation ✦</button>
 
 <div class="corner bottom-left">
@@ -60,6 +47,6 @@
   sky: <a href="https://svs.gsfc.nasa.gov/4851" target="_blank" rel="noopener">Deep Star Maps 2020</a>, NASA/Goddard Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC, over Yogyakarta, now
 </p>
 
-<script type="module" src="world.js?v=11"></script>
+<script type="module" src="world.js?v=15"></script>
 </body>
 </html>

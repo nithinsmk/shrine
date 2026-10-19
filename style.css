@@ -41,31 +41,9 @@ button:hover { background: var(--moon); color: var(--night); }
   .top-right { max-width: 180px; font-size: 10px; }
 }
 
-/* --- the invitation crawl --- */
-#crawl { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
-#crawl[hidden], #invitation[hidden] { display: none; }
-.crawl-stage {
-  position: absolute; left: 50%; bottom: 0; width: min(760px, 92vw); height: 140vh;
-  transform: translateX(-50%) perspective(380px) rotateX(24deg);
-  transform-origin: 50% 100%;
-  -webkit-mask-image: linear-gradient(to top, #000 55%, transparent 92%);
-  mask-image: linear-gradient(to top, #000 55%, transparent 92%);
-}
-.crawl-text {
-  position: absolute; top: 100%; width: 100%;
-  color: var(--glow); text-align: justify; hyphens: none; overflow-wrap: normal;
-  font: 600 clamp(20px, 3.4vw, 34px)/1.45 ui-monospace, Menlo, monospace;
-  text-shadow: 0 0 14px rgba(212, 242, 60, .55);
-}
-.crawl-text p { margin: 0 0 1.2em; }
-.crawl-head, .crawl-title { text-align: center; }
-.crawl-text p { text-align-last: left; }
-.crawl-head, .crawl-title, .crawl-lineup { text-align-last: center !important; }
-.crawl-title { font-size: 1.6em; letter-spacing: .12em; margin-bottom: 1.4em !important; }
-.crawl-lineup { text-align: center; opacity: .9; }
-#crawl.rolling .crawl-text { animation: crawl 62s linear; }
-@keyframes crawl { from { transform: translateY(0); } to { transform: translateY(-230%); } }
-#crawl-skip { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); pointer-events: auto; }
+/* --- the invitation crawl (the text itself is in the 3D world) --- */
+#crawl-skip { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 4; }
+#crawl-skip[hidden], #invitation[hidden] { display: none; }
 
 /* the button it shrinks into: impossible to miss */
 #invitation {
@@ -81,4 +59,4 @@ button:hover { background: var(--moon); color: var(--night); }
   70% { transform: translate(-50%, 2px) scale(1.02) rotate(-1.5deg); }
   80% { transform: translate(-50%, 2px) scale(1.02) rotate(1.5deg); }
 }
-@media (max-width: 600px) { #invitation { top: auto; bottom: 64px; } }
+@media (max-width: 600px) { #invitation, #crawl-skip { top: auto; bottom: 64px; } }
