@@ -371,6 +371,7 @@ export async function makeCat({ scene, camera, world, shrine, beat }) {
   return {
     update, get position() { return cat.position; }, height: H,
     get heading() { return heading; },              // the way she last walked (x, z)
+    footR, footY,                                   // how wide and where the shrine stands at its foot
     get resting() { return !step.to; },
     groundAt: (x, z) => ground.at(x, z),
     // for ?debug

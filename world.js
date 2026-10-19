@@ -8,6 +8,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makeCat } from './cat.js?v=3';
 import { makeSky } from './sky.js?v=1';
+import { makeSatellite, makeTicker, mountCrawl } from './party.js?v=5';
 
 const SCAN = 'scans/mounds.glb';
 const STREAM = 'https://stream.radioalhara.net/ra';
@@ -23,6 +24,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(NIGHT);
 let sky = null;
+let satellite = null, ticker = null;
+mountCrawl();
 
 // --- brightness: from deep night (0) to the photo's own daylight (1), remembered per visitor ---
 const groundMats = [];
@@ -77,6 +80,7 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   scene.fog = new THREE.Fog(NIGHT, shrine.reach * 1.5, Math.max(shrine.reach * 5, span * 0.6));
   sky = makeSky(scene, span * 1.5);
   sky.centre(shrine.base);
+  satellite = makeSatellite(scene, shrine.base, span * 0.9);
   camera.near = span / 2000;
   camera.far = span * 4;
   camera.updateProjectionMatrix();
@@ -85,7 +89,13 @@ new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(SCAN, (e) => {
   arrive();
   $('loading').classList.add('gone');
   makeCat({ scene, camera, world, shrine, beat: () => listen(performance.now()) })
-    .then((c) => { cat = c; })
+    .then((c) => {
+      cat = c;
+      // the ticker turns round the foot of the shrine, just above the ground
+      const r = c.footR * 1.35;
+      const around = [...Array(12)].map((_, i) => c.groundAt(shrine.peak.x + Math.cos(i / 2) * r, shrine.peak.z + Math.sin(i / 2) * r)).filter((y) => !Number.isNaN(y));
+      ticker = makeTicker(scene, { x: shrine.peak.x, z: shrine.peak.z, groundY: Math.max(...around), radius: r, height: c.height * 0.8 });
+    })
     .catch((err) => console.error('the cat did not come', err));
 }).catch((err) => {
   console.error(err);
@@ -240,6 +250,8 @@ renderer.setAnimationLoop((now) => {
   followFrame(dt, now);
   controls.update();
   sky?.update();
+  satellite?.update(now);
+  ticker?.update(dt);
   renderer.render(scene, camera);
 });
 
@@ -318,4 +330,4 @@ function listen(now) {
 }
 
 // ?debug: a handle for looking at the cat from the console
-if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };
+if (new URLSearchParams(location.search).has('debug')) window.shrineDebug = { get cat() { return cat; }, get satellite() { return satellite; }, get follow() { return follow; }, camera, controls, get shrine() { return shrine; }, flyTo };
