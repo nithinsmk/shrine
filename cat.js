@@ -3,6 +3,7 @@
 // around the mounds, sits, and always comes back to curl up and sleep again.
 // The sheets are cut up here, in the browser: panels are found by their dark gutters, the grey
 // paper is keyed out and the green fire kept. The flames get a glow that flares on the beat.
+// Four pets, or five minutes, and she changes from ink to chrome, or back.
 
 import * as THREE from 'three';
 
@@ -20,7 +21,16 @@ const POSES = {
   sleep: { src: 'sleep.webp', panels: [0], faces: 'L', h: 0.55 },
   bow: { src: 'stretches.webp', panels: [0], faces: 'R', h: 1.15 },  // front stretch
   arch: { src: 'stretches.webp', panels: [1], faces: 'L', h: 1.1 },  // back arch
+  // petting: a drawn hand strokes her (1–2), her back rises, the green fire bursts out (3–4)
+  pet: { src: 'chrome/ink_pet_to_flame_grey.webp', panels: [0, 1, 2, 3], faces: 'R', h: 1.3, union: true },
+  // the change: ink to chrome over six steps of a walk (played backwards to change back)
+  morph: { src: 'chrome/ink_to_chrome_walk_magenta.webp', panels: [0, 1, 2, 3, 4, 5], faces: 'R', h: 1, union: true, key: 'magenta' },
+  cwalk: { src: 'chrome/chrome_walk_magenta.webp', panels: [0, 1, 2, 3, 4, 5], faces: 'R', h: 1, fps: 7, union: true, key: 'magenta' },
+  csleep: { src: 'chrome/chrome_sleep_magenta.webp', panels: [0, 1, 2, 3, 4, 5], faces: 'L', h: 0.55, fps: 3, union: true, key: 'magenta', loop: true },
 };
+const CHANGE_EVERY = 5 * 60 * 1000; // she changes on her own every five minutes
+// as chrome there are only walking and sleeping drawings: everything else borrows from them
+const CHROME = { walk: 'cwalk', trot: 'cwalk', sleep: 'csleep', curl: 'csleep', lie: 'csleep', loaf: 'csleep', sit: 'cstand', bow: 'cstand', arch: 'cstand' };
 
 // --- cutting the drawings ---
 
@@ -39,14 +49,14 @@ function pixels(img) {
   return g.getImageData(0, 0, c.width, c.height);
 }
 
-// panels sit between dark gutter lines (or fill the whole image when there are none)
+// panels sit between dark or white gutter lines (or fill the whole image when there are none)
 function findPanels({ data, width, height }) {
   const lum = (x, y) => { const i = (y * width + x) * 4; return (data[i] + data[i + 1] + data[i + 2]) / 3; };
   const darkRuns = (n, m, at) => {
     const dark = [];
     for (let a = 0; a < n; a++) {
       let d = 0;
-      for (let b = 0; b < m; b += 4) if (at(a, b) < 90) d++;
+      for (let b = 0; b < m; b += 4) { const L = at(a, b); if (L < 90 || L > 235) d++; } // dark or white gutter lines
       dark.push(d / Math.ceil(m / 4) > 0.85);
     }
     const spans = [];
@@ -67,7 +77,8 @@ function findPanels({ data, width, height }) {
 }
 
 // key one panel off its paper: ink stays black, the green fire keeps its colour
-function keyPanel(src, p) {
+function keyPanel(src, p, key = 'grey') {
+  if (key === 'magenta') return keyMagenta(src, p);
   const w = p.x1 - p.x0, h = p.y1 - p.y0;
   const out = new ImageData(w, h);
   const s = src.data, d = out.data;
@@ -99,6 +110,36 @@ function keyPanel(src, p) {
   return { image: out, box: { minX, minY, maxX, maxY }, fire: gw > 20 ? { x: gx / gw, y: gy / gw } : null };
 }
 
+// key a chrome panel off flat magenta: anything less magenta than the paper stays, the paper's
+// tint is un-mixed from the soft edges and glow, and leftover pink is pulled out of the metal
+function keyMagenta(src, p) {
+  const w = p.x1 - p.x0, h = p.y1 - p.y0;
+  const out = new ImageData(w, h);
+  const s = src.data, d = out.data;
+  const border = [];
+  for (let x = 0; x < w; x += 7) for (const y of [2, h - 3]) border.push((p.y0 + y) * src.width + p.x0 + x);
+  const bg = [0, 1, 2].map((k) => border.map((i) => s[i * 4 + k]).sort((a, b) => a - b)[border.length >> 1]);
+  const bgM = Math.min(bg[0], bg[2]) - bg[1];
+  let gx = 0, gy = 0, gw = 0;
+  let minX = w, minY = h, maxX = 0, maxY = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = ((p.y0 + y) * src.width + p.x0 + x) * 4, o = (y * w + x) * 4;
+      const r = s[i], g = s[i + 1], b = s[i + 2];
+      const m = Math.min(r, b) - g; // how magenta this pixel is
+      const a = Math.min(1, Math.max(0, 1 - (m - 12) / (bgM * 0.8 - 12)));
+      if (a <= 0.02) continue;
+      let c = [r, g, b].map((v, k) => Math.min(255, Math.max(0, (v - bg[k] * (1 - a)) / a)));
+      const spill = Math.min(c[0], c[2]) - c[1];
+      if (spill > 0) { c[0] -= spill; c[2] -= spill; }
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = a * 255;
+      if (a > 0.3) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+      if (c[1] > c[0] + 50 && c[1] > c[2] + 50 && c[1] > 150) { gx += x; gy += y; gw++; }
+    }
+  }
+  return { image: out, box: { minX, minY, maxX, maxY }, fire: gw > 20 ? { x: gx / gw, y: gy / gw } : null };
+}
+
 function crop(keyed, box) {
   const pad = 6;
   const x0 = Math.max(0, box.minX - pad), y0 = Math.max(0, box.minY - pad);
@@ -123,7 +164,7 @@ async function cutPoses() {
       sheets[pose.src] = { px, panels: findPanels(px) };
     }
     const { px, panels } = sheets[pose.src];
-    const keyed = pose.panels.map((n) => keyPanel(px, panels[n]));
+    const keyed = pose.panels.map((n) => keyPanel(px, panels[n], pose.key));
     let frames;
     if (pose.union) {
       // a cycle keeps one box for all its frames, so the feet don't jump
@@ -135,6 +176,7 @@ async function cutPoses() {
     } else frames = keyed.map((k) => crop(k, k.box));
     poses[name] = { ...pose, frames };
   }
+  poses.cstand = { ...poses.cwalk, fps: 0, frames: [poses.cwalk.frames[0]] }; // chrome, standing still
   return poses;
 }
 
@@ -311,21 +353,65 @@ export async function makeCat({ scene, camera, world, shrine, beat }) {
   let frameClock = 0;
   let flare = 0, flickerUntil = 0;
 
+  // --- petting and changing: four pets (or five minutes) and she turns ink ↔ chrome ---
+  let form = 'ink';
+  let act = null;              // a pet or the change, playing over whatever she was doing
+  let pets = 0, lastPet = 0, lastChange = performance.now();
+
+  function startMorph(now) {
+    const to = form === 'ink' ? 'chrome' : 'ink';
+    // stepped and stuttering, like skipped frames
+    const seq = [0, 0, 1, 0, 1, 1, 2, 1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 5, 5];
+    act = { kind: 'morph', t0: now, ms: 105, seq: to === 'chrome' ? seq : [...seq].reverse(), to };
+    pets = 0;
+    flare = 1;
+  }
+
+  function pet(now) {
+    if (act?.kind === 'morph') return;
+    if (now - lastPet > 10000) pets = 0;
+    lastPet = now;
+    pets++;
+    flare = Math.max(flare, 0.4 + pets * 0.15);
+    const last = pets >= 4;
+    if (form === 'ink') act = { kind: 'pet', i: Math.min(pets - 1, 3), until: now + (last ? 900 : 1800), then: last ? startMorph : null };
+    else act = { kind: 'cpet', until: now + 700, then: last ? startMorph : null };
+  }
+
   function update(dt, now) {
-    step.t += dt;
-    const pose = poses[step.pose];
-    let moving = false;
-    if (step.to) {
-      const speed = H * (step.pose === 'trot' ? 2.4 : 0.9);
-      const d = step.to.clone().sub(pos);
-      const len = d.length();
-      if (len < speed * dt || len < 1e-6) { pos.copy(step.to); next(); } else {
-        d.multiplyScalar(1 / len);
-        heading.lerp(d, Math.min(1, dt * 6)).normalize();
-        pos.addScaledVector(d, speed * dt);
-        moving = true;
+    let poseName = null, frame = null, moving = false, jitter = 0;
+    if (!act && now - lastChange > CHANGE_EVERY) startMorph(now);
+    if (act) {
+      if (act.kind === 'morph') {
+        const k = Math.floor((now - act.t0) / act.ms);
+        if (k >= act.seq.length) { form = act.to; act = null; lastChange = now; } else {
+          poseName = 'morph';
+          frame = poses.morph.frames[act.seq[k]];
+          jitter = (Math.random() - 0.5) * H * 0.12; // the glitch shakes the cutout
+        }
+      } else {
+        poseName = act.kind === 'pet' ? 'pet' : 'cstand';
+        frame = poses[poseName].frames[act.kind === 'pet' ? act.i : 0];
+        if (act.kind === 'cpet') jitter = Math.sin(now / 25) * H * 0.02; // chrome shivers when touched
+        if (now > act.until) { const then = act.then; act = null; then?.(now); }
       }
-    } else if (step.t > step.secs) next();
+    }
+    if (!poseName) {
+      step.t += dt;
+      if (step.to) {
+        const speed = H * (step.pose === 'trot' ? 2.4 : 0.9);
+        const d = step.to.clone().sub(pos);
+        const len = d.length();
+        if (len < speed * dt || len < 1e-6) { pos.copy(step.to); next(); } else {
+          d.multiplyScalar(1 / len);
+          heading.lerp(d, Math.min(1, dt * 6)).normalize();
+          pos.addScaledVector(d, speed * dt);
+          moving = true;
+        }
+      } else if (step.t > step.secs) next();
+      poseName = form === 'chrome' ? CHROME[step.pose] : step.pose;
+    }
+    const pose = poses[poseName];
 
     // the cutout always turns to the camera, standing upright on the ground
     const y = ground.at(pos.x, pos.y);
@@ -338,14 +424,15 @@ export async function makeCat({ scene, camera, world, shrine, beat }) {
     if (side > 0.15) facing = 'R'; else if (side < -0.15) facing = 'L';
 
     const frames = pose.frames;
-    if (moving) frameClock += dt * pose.fps;
-    const f = frames[Math.floor(frameClock) % frames.length];
-    const show = moving || !pose.fps ? f : frames[0];
+    if (moving || pose.loop) frameClock += dt * pose.fps;
+    const show = frame || (moving || pose.loop ? frames[Math.floor(frameClock) % frames.length] : frames[0]);
     if (mat.map !== show.tex) { mat.map = show.tex; mat.needsUpdate = true; }
     const flip = pose.faces === facing ? 1 : -1;
-    const breathe = step.pose === 'sleep' || step.pose === 'curl' ? 1 + 0.025 * Math.sin(now / 700) : 1;
+    const asleep = ['sleep', 'curl', 'csleep'].includes(poseName);
+    const breathe = asleep ? 1 + 0.025 * Math.sin(now / 700) : 1;
     const h = H * pose.h;
     body.scale.set(h * show.aspect * flip, h * breathe, 1);
+    body.position.x = jitter;
     shadow.scale.set(h * show.aspect * 0.8, 1, H * 0.45);
     shadow.position.y = H * 0.02;
     shadow.rotation.y = body.rotation.y;
@@ -358,8 +445,7 @@ export async function makeCat({ scene, camera, world, shrine, beat }) {
       const ly = show.fire.v * h * breathe;
       const toCam = new THREE.Vector3(Math.sin(body.rotation.y), 0, Math.cos(body.rotation.y));
       const sideways = new THREE.Vector3(toCam.z, 0, -toCam.x);
-      glow.position.set(0, ly, 0).addScaledVector(sideways, lx).addScaledVector(toCam, H * 0.05);
-      const asleep = step.pose === 'sleep' || step.pose === 'curl';
+      glow.position.set(0, ly, 0).addScaledVector(sideways, lx + jitter).addScaledVector(toCam, H * 0.05);
       let g = (asleep ? 0.12 : 0.22) + (asleep ? 0.35 : 0.75) * flare;
       if (now < flickerUntil && Math.random() < 0.45) g *= 0.3; // the fire stutters
       glow.material.opacity = g;
@@ -374,8 +460,11 @@ export async function makeCat({ scene, camera, world, shrine, beat }) {
     footR, footY,                                   // how wide and where the shrine stands at its foot
     get resting() { return !step.to; },
     groundAt: (x, z) => ground.at(x, z),
+    pet: (now = performance.now()) => pet(now),
+    hits: (raycaster) => raycaster.intersectObject(body).length > 0,
+    get form() { return form; },
     // for ?debug
-    get state() { return { pose: step.pose, to: step.to?.toArray(), left: plan.length, footR, bed: bed.toArray() }; },
+    get state() { return { form, act: act?.kind, pets, pose: step.pose, to: step.to?.toArray(), left: plan.length, footR, bed: bed.toArray() }; },
     probe: () => { let open = 0, clear = 0; for (let i = 0; i < 200; i++) { const a = Math.random() * 6.28, r = footR + H * (2 + Math.random() * 14); const p = centre.clone().add(new THREE.Vector2(Math.cos(a), Math.sin(a)).multiplyScalar(r)); if (isOpen(p)) { open++; if (clearPath(bed, p)) clear++; } } return { open, clear }; },
   };
 }

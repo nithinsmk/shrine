@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { makeCat } from './cat.js?v=3';
+import { makeCat } from './cat.js?v=4';
 import { makeSky } from './sky.js?v=1';
 import { makeSatellite, makeTicker, makeCrawl } from './party.js?v=6';
 
@@ -322,6 +322,31 @@ function followFrame(dt, now) {
 }
 
 $('follow').addEventListener('click', () => (follow ? endFollow() : startFollow()));
+
+// --- petting her: a tap (not a drag) on the cat ---
+const ray = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+function onCat(e) {
+  if (!cat) return false;
+  const r = canvas.getBoundingClientRect();
+  pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(pointer, camera);
+  return cat.hits(ray);
+}
+let press = null;
+canvas.addEventListener('pointerdown', (e) => { press = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+canvas.addEventListener('pointerup', (e) => {
+  if (!press) return;
+  const still = Math.hypot(e.clientX - press.x, e.clientY - press.y) < 8 && performance.now() - press.t < 600;
+  press = null;
+  if (still && onCat(e)) cat.pet();
+});
+let hoverAt = 0;
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || performance.now() - hoverAt < 80) return;
+  hoverAt = performance.now();
+  canvas.style.cursor = onCat(e) ? 'pointer' : '';
+});
 
 let last = performance.now();
 renderer.setAnimationLoop((now) => {
