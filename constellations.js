@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 
-// texts: DRAFTS from the collectives' own pages and listings, waiting for Nithin's approval
+// texts: drafted from the collectives' own pages and listings, approved by Nithin (19 Oct 2026)
 export const COLLECTIVES = [
   {
     id: 'chinabot', name: 'CHINABOT', src: 'party/logos/chinabot.png', mask: 'alpha', colour: 0xfff04a,
