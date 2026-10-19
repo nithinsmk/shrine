@@ -3,29 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Termite shrine — eye test</title>
-<style>
-  :root { --bg: #bbbbbb; --ink: #111; --glow: #d4f23c; }
-  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
-  body.dark { --bg: #0b1108; --ink: #d4f23c; }
-  canvas { display: block; width: 100vw; height: 100vh; }
-  .bar { position: fixed; left: 16px; bottom: 16px; display: flex; gap: 8px; align-items: center;
-         font: 13px/1.3 ui-monospace, Menlo, monospace; color: var(--ink); }
-  button { font: inherit; color: inherit; background: none; border: 1px solid currentColor;
-           padding: 6px 10px; cursor: pointer; }
-  #now { opacity: .7; }
-  #tune { position: fixed; right: 16px; top: 16px; font: 12px ui-monospace, Menlo, monospace;
-          color: var(--ink); white-space: pre; display: none; }
-</style>
+<title>shrine</title>
+<meta name="description" content="A termite mound shrine, tuned to Radio alHara.">
+<link rel="stylesheet" href="style.css?v=1">
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+</script>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div class="bar">
-  <button id="play">▶ Radio al Hara</button>
-  <button id="bg">dark / grey</button>
-  <span id="now"></span>
+<canvas id="world"></canvas>
+
+<div id="loading">gathering the mounds… <span id="progress"></span></div>
+
+<div class="corner bottom-left">
+  <button id="tune" type="button">▶ tune in</button>
+  <p id="onair" hidden>Radio alHara, live from Bethlehem · <a href="https://www.radioalhara.net/" target="_blank" rel="noopener">radioalhara.net</a></p>
+  <p id="notice" role="status"></p>
 </div>
-<div id="tune"></div>
-<script src="eye.js"></script>
+
+<div class="corner bottom-right">
+  <button id="home" type="button" title="back to the shrine" aria-label="back to the shrine">⌂</button>
+</div>
+
+<p class="corner top-left title">shrine</p>
+
+<p class="corner top-right credit">
+  scan: <a href="https://sketchfab.com/3d-models/australian-termite-mounds-e6974aab628349edaf3f5e37bd0c97b9" target="_blank" rel="noopener">Australian Termite Mounds</a>
+  by <a href="https://sketchfab.com/rawnsley" target="_blank" rel="noopener">Rupert Rawnsley</a>,
+  <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, compressed for the web
+</p>
+
+<script type="module" src="world.js?v=1"></script>
 </body>
 </html>

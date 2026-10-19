@@ -1,0 +1,35 @@
+:root {
+  --paper: #bbbbbb;   /* the grey the cat drawings are made on */
+  --ink: #111111;
+  --glow: #d4f23c;
+}
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--paper); color: var(--ink); }
+body { font: 13px/1.4 ui-monospace, Menlo, monospace; }
+#world { display: block; position: fixed; inset: 0; width: 100vw; height: 100vh; touch-action: none; }
+
+.corner { position: fixed; margin: 0; z-index: 2; }
+.top-left { top: 16px; left: 16px; }
+.top-right { top: 16px; right: 16px; max-width: 280px; text-align: right; font-size: 11px; opacity: .75; }
+.bottom-left { bottom: 16px; left: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: calc(100vw - 96px); }
+.bottom-right { bottom: 16px; right: 16px; }
+.title { font-size: 15px; letter-spacing: .08em; }
+a { color: inherit; }
+p { margin: 0; }
+
+button {
+  font: inherit; color: var(--ink); background: rgba(187, 187, 187, .7); border: 1px solid var(--ink);
+  padding: 7px 12px; cursor: pointer; backdrop-filter: blur(4px);
+}
+button:hover { background: var(--ink); color: var(--glow); }
+#home { width: 34px; height: 34px; padding: 0; font-size: 16px; }
+#notice:empty { display: none; }
+
+#loading {
+  position: fixed; inset: 0; display: grid; place-items: center; z-index: 3;
+  background: var(--paper); transition: opacity .8s;
+}
+#loading.gone { opacity: 0; pointer-events: none; }
+
+@media (max-width: 600px) {
+  .top-right { max-width: 180px; font-size: 10px; }
+}
